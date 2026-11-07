@@ -217,12 +217,28 @@ class Runtime {
   loadNative() {
     if (this.nativeLoaded) return this.native;
     this.nativeLoaded = true;
-    // This is the user's installed vendor module, not a binary distributed by this plugin.
-    if (process.platform === 'darwin' && process.arch === 'arm64') {
+    if (process.platform === "darwin" && process.arch === "arm64") {
       try {
-        const sdk = require('/Applications/汽水音乐.app/Contents/Resources/app.asar.unpacked/bdms.node');
-        if (typeof sdk.init === 'function' && typeof sdk.generateHttpSignatureHeaders === 'function') { sdk.init({ deviceId: this.identity.deviceId }); this.native = sdk; }
+        const sdk = require("/Applications/汽水音乐.app/Contents/Resources/app.asar.unpacked/bdms.node");
+        if (typeof sdk.init === "function" && typeof sdk.generateHttpSignatureHeaders === "function") { sdk.init({ deviceId: this.identity.deviceId }); this.native = sdk; }
       } catch { this.native = null; }
+    } else if (process.platform === "win32") {
+      const candidates = [
+        path.join(this.dataDir, "vendor", "bdms.node"),
+        path.join(process.env.LOCALAPPDATA || "", "Programs", "SodaMusic", "resources", "app.asar.unpacked", "bdms.node"),
+        path.join(process.env.ProgramFiles || "", "SodaMusic", "resources", "app.asar.unpacked", "bdms.node"),
+        path.join(process.env["ProgramFiles(x86)"] || "", "SodaMusic", "resources", "app.asar.unpacked", "bdms.node")
+      ];
+      for (const cand of candidates) {
+        try {
+          const sdk = require(cand);
+          if (typeof sdk.init === "function" && typeof sdk.generateHttpSignatureHeaders === "function") {
+            sdk.init({ deviceId: this.identity.deviceId });
+            this.native = sdk;
+            break;
+          }
+        } catch {}
+      }
     }
     return this.native;
   }
@@ -248,7 +264,7 @@ class Runtime {
     const signature = String(sdk.generateHttpSignatureHeaders(url.href, lines.join('\r\n'))).split('\r\n').filter(Boolean);
     const headers = { 'User-Agent': ua, Cookie: await this.cookieHeader(), ...(text ? { 'Content-Type': 'application/json; charset=utf-8' } : {}) };
     for (let index = 0; index + 1 < signature.length; index += 2) if (/^x-[a-z0-9-]+$/i.test(signature[index])) headers[signature[index]] = signature[index + 1];
-    if (!Object.keys(headers).some(k => /^x-(helios|medusa)$/i.test(k))) throw fault('sdk');
+    if (!Object.keys(headers).some(k => /^x-(helios|medusa|neptune)$/i.test(k))) throw fault('sdk');
     signal?.throwIfAborted();
     let response;
     try { response = await fetch(url, { method: text ? 'POST' : 'GET', headers, body: text, redirect: 'error', signal: signal || AbortSignal.timeout(20000) }); }

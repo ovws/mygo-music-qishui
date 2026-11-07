@@ -48,8 +48,21 @@ async function start() {
   await app.whenReady(); app.dock?.hide();
   runtime = new Runtime(dataDir, event => { if (loginId !== null) send({ id: loginId, event: 'prompt', ...event }); });
   await runtime.base();
-  process.stdin.setEncoding('utf8');
-  process.stdin.on('data', chunk => {
+  try {
+    const storageFile = path.join(dataDir, '..', 'storage.json');
+    if (fs.existsSync(storageFile)) {
+      const storage = JSON.parse(fs.readFileSync(storageFile, 'utf8'));
+      if (storage.cookie) {
+        await runtime.importCookies(storage.cookie);
+        await runtime.ses.cookies.flushStore();
+      }
+    }
+  } catch (e) {}
+  const input = process.platform === 'win32'
+    ? fs.createReadStream(null, { fd: 4, autoClose: false })
+    : process.stdin;
+  input.setEncoding('utf8');
+  input.on('data', chunk => {
     buffer += chunk;
     let at;
     while ((at = buffer.indexOf('\n')) >= 0) {
@@ -61,8 +74,8 @@ async function start() {
     }
     if (Buffer.byteLength(buffer) > MAX_LINE_BYTES) quit();
   });
-  process.stdin.on('end', () => quit());
-  process.stdin.on('error', () => quit());
+  input.on('end', () => quit());
+  input.on('error', () => quit());
 }
 app.on('window-all-closed', () => {});
 app.on('before-quit', () => { quitting = true; runtime?.cancel(); });

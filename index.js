@@ -204,11 +204,12 @@ export async function stream({ id, quality = "standard" }) {
   }
   let url;
   try { url = new URL(result?.url); } catch { throw fail("unavailable", "汽水辅助程序没有返回有效音频。"); }
-  const expected = host.dataDir.replace(/\/$/, "") + "/auth-sdk/audio-cache/";
-  const file = decodeURIComponent(url.pathname);
-  if (url.protocol !== "file:" || url.hostname || url.search || url.hash || !file.startsWith(expected) ||
-      !/^run-[A-Za-z0-9]+\/[a-f0-9]{32}\.(mp3|flac)$/.test(file.slice(expected.length)) ||
-      !["mp3", "flac"].includes(result.type) || !file.endsWith("." + result.type) || !Number.isSafeInteger(result.size) || result.size <= 0) {
+  const normExpected = host.dataDir.replace(/\\/g, "/").replace(/\/$/, "").toLowerCase() + "/auth-sdk/audio-cache/";
+  let normFile = decodeURIComponent(url.pathname).replace(/^\/([a-zA-Z]:)/, "$1").toLowerCase();
+  const relPath = normFile.startsWith(normExpected) ? normFile.slice(normExpected.length) : "";
+  if (url.protocol !== "file:" || url.hostname || url.search || url.hash || !relPath ||
+      !/^run-[a-z0-9]+\/[a-f0-9]{32}\.(mp3|flac)$/i.test(relPath) ||
+      !["mp3", "flac"].includes(result.type) || !normFile.endsWith("." + result.type) || !Number.isSafeInteger(result.size) || result.size <= 0) {
     throw fail("unavailable", "汽水辅助程序返回了无法验证的音频文件。");
   }
   host.storage.set("playbackDiagnostic", { version: VERSION, status: "prepared", size: result.size });

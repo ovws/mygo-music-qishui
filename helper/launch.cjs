@@ -15,16 +15,21 @@ for (const key of ['PATH', 'HOME', 'TMPDIR', 'TEMP', 'TMP', 'SystemRoot', 'WINDI
   if (process.env[key]) env[key] = process.env[key];
 }
 // Vendor/browser/native stdout and stderr never share the credential-bearing RPC channel.
-const child = spawn(binary, [path.join(__dirname, 'main.cjs'), '--data-dir', dataDir], { env, stdio: ['pipe', 'ignore', 'ignore', 'pipe'], windowsHide: true });
+// On Windows GUI Electron, stdio[0] (STD_INPUT_HANDLE) emits EOF immediately; use fd 4 for input.
+const stdio = process.platform === 'win32'
+  ? ['pipe', 'ignore', 'ignore', 'pipe', 'pipe']
+  : ['pipe', 'ignore', 'ignore', 'pipe'];
+const child = spawn(binary, [path.join(__dirname, 'main.cjs'), '--data-dir', dataDir], { env, stdio, windowsHide: true });
+const writer = process.platform === 'win32' ? child.stdio[4] : child.stdin;
 let stopped = false, buffer = '';
 const stop = () => {
   if (stopped) return; stopped = true;
-  child.stdin.end();
+  try { writer.end(); } catch {}
   const timer = setTimeout(() => child.kill('SIGTERM'), 2000); timer.unref();
 };
 child.on('error', () => { fail('setup'); stopped = true; });
-child.stdin.on('error', () => {});
-process.stdin.pipe(child.stdin);
+writer.on('error', () => {});
+process.stdin.pipe(writer);
 process.stdin.on('end', stop);
 process.on('SIGTERM', stop); process.on('SIGINT', stop);
 child.stdio[3].setEncoding('utf8');
@@ -42,5 +47,5 @@ child.stdio[3].on('data', chunk => {
 child.on('exit', code => {
   if (!stopped && code !== 0) fail('unavailable');
   process.exitCode = code === 0 ? 0 : 1;
-  process.stdin.unpipe(child.stdin); process.stdin.pause();
+  process.stdin.unpipe(writer); process.stdin.pause();
 });

@@ -38,7 +38,8 @@ function mapTrack(raw) {
  const album=albumRaw?mapAlbum(albumRaw):{id:'',name:''};
  if (!album.imageUrl) album.imageUrl=image(v.display_info?.cover_url??v.display_info?.url_cover??v.url_cover);
  const artists=v.related_info?.artist_links??v.artists;
- return {id:base.id,name:text(base.name),artists:artists===undefined?[]:list(artists).map(mapArtist),album,duration};
+ const mappedArtists=artists===undefined?[]:list(artists).map(a=>{try{return mapArtist(a);}catch{return a&&typeof a==='object'?{id:typeof a.id==='string'?a.id:'',name:text(a.name||a.nickname||'')}:null;}}).filter(Boolean);
+ return {id:base.id,name:text(base.name),artists:mappedArtists,album,duration};
 }
 function mapPlaylist(raw,accountId) { const v=entity(raw,'playlist');return {id:v.id,name:text(v.title||v.public_title||v.name),imageUrl:image(v.url_cover),description:text(v.description),owner:text(v.owner?.nickname),trackCount:Number.isSafeInteger(v.count_tracks)&&v.count_tracks>=0?v.count_tracks:0,mine:!!accountId&&v.owner?.id===accountId}; }
 const MAPPERS={tracks:mapTrack,albums:mapAlbum,artists:mapArtist,playlists:mapPlaylist};
@@ -99,7 +100,7 @@ class Catalog {
    root=await this._api(ctx,path,{...query,cursor,count:100});const raw=pageList(root,field,()=>{
     if(path==='playlist/detail'){const meta=root.playlist??root.playlist_info;return !!meta && mapPlaylist(meta,this.accountId).id===query.playlist_id;}
     return successful(root);
-   });rawCount+=raw.length;if(rawCount>5000)throw pagination();out.push(...raw.map(mapper));
+   });rawCount+=raw.length;if(rawCount>5000)throw pagination();const filtered=path==="playlist/detail"?raw.filter(x=>!x?.type||x.type==="track"):raw;out.push(...filtered.map(mapper));
    const next=nextPage(root,raw.length,cursors);if(next===null)return {items:out,root};if(rawCount>=5000)throw pagination();cursors.add(next);cursor=next;
   }throw pagination();
  }
@@ -129,7 +130,7 @@ class Catalog {
  playlists() {return this._run(ctx=>this._playlists(ctx));}
  async _playlist(ctx,value) {
   const {items,root}=await this._all(ctx,'playlist/detail',['media_resources','media'],{playlist_id:value},mapTrack);
-  const meta=root.playlist??root.playlist_info;if(!meta)throw fault('response');const p=mapPlaylist(meta,this.accountId);if(p.id!==value)throw fault('response');return {...p,tracks:unique(items)};
+  const meta=root.playlist??root.playlist_info;if(!meta)throw fault('response');const p=mapPlaylist(meta,this.accountId);if(p.id!==value)throw fault('response');return {...p,tracks:unique(items.filter(Boolean))};
  }
  playlist({id:value}={}) {return this._run(ctx=>this._playlist(ctx,id(value)));}
  async _likes(ctx) {

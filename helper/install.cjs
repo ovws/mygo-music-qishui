@@ -10,7 +10,9 @@ function runCommand(command, args, cwd) {
   return new Promise((resolve, reject) => {
     const env = { ...process.env };
     for (const key of ['ELECTRON_RUN_AS_NODE', 'ELECTRON_SKIP_BINARY_DOWNLOAD', 'ELECTRON_OVERRIDE_DIST_PATH', 'ELECTRON_INSTALL_PLATFORM', 'ELECTRON_INSTALL_ARCH']) delete env[key];
-    const child = spawn(command, args, { cwd, env, shell: false, stdio: 'inherit' });
+    if (!env.ELECTRON_MIRROR) env.ELECTRON_MIRROR = 'https://npmmirror.com/mirrors/electron/';
+    const isCmd = process.platform === 'win32' && (command.endsWith('.cmd') || command.endsWith('.bat'));
+    const child = spawn(command, args, { cwd, env, shell: isCmd, stdio: 'inherit' });
     child.once('error', reject);
     child.once('exit', code => code === 0 ? resolve() : reject(fault('setup')));
   });
